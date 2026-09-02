@@ -75,7 +75,9 @@ test.describe("the buyer's funnel", () => {
     await page.getByRole("button", { name: /Find a slot/ }).click();
 
     await page.waitForURL("**/search");
-    await expect(page.getByText(/Buyer's side/)).toBeVisible();
+    // `.` rather than an apostrophe: the page renders a typographic ’, and an
+    // ASCII ' silently matches nothing.
+    await expect(page.getByText(/Buyer.s side/i)).toBeVisible();
   });
 });
 

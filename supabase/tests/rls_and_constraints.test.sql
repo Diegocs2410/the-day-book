@@ -222,7 +222,10 @@ select is(
 -- ---------------------------------------------------------------------------
 
 set local role anon;
-set local request.jwt.claims = null;
+-- `reset`, not `= null`: SET takes a value or DEFAULT, never the null keyword.
+-- Clearing the claim is what makes the rest of this file run as a genuine
+-- signed-out visitor rather than as the last buyer who was set.
+reset request.jwt.claims;
 
 select is(
   (select count(*)::int from public.listings),
