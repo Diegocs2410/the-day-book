@@ -49,3 +49,8 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /coverage/
+
+# local secrets (db password, linked project state)
+*.local
+!.env.example
+.supabase/
