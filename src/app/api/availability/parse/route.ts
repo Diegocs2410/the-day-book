@@ -77,11 +77,23 @@ export async function POST(request: Request) {
       empty: "Type when you are free, or set the hours in the grid.",
       unparseable:
         "That could not be read as availability. Try something like: weekday evenings after 6, Saturday mornings.",
+      upstream:
+        "The parser is unavailable right now. Set the hours in the grid instead — it does the same job.",
     } as const;
+
+    // The upstream reason is the only one the buyer cannot do anything about,
+    // and the only one an operator needs to see. It goes to the log; what
+    // reaches the screen never includes an API message, which can carry
+    // account and key details that are nobody's business on a public demo.
+    if (result.reason === "upstream") {
+      console.error("[availability/parse] upstream failure:", result.detail);
+    }
+
+    const status = { disabled: 503, upstream: 502, too_long: 422, empty: 422, unparseable: 422 };
 
     return NextResponse.json(
       { error: messages[result.reason] },
-      { status: result.reason === "disabled" ? 503 : 422 },
+      { status: status[result.reason] },
     );
   }
 

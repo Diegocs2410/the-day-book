@@ -37,7 +37,12 @@ export type ParsedAvailability = z.infer<typeof parsedRulesSchema>;
 
 export type ParseResult =
   | { ok: true; value: ParsedAvailability }
-  | { ok: false; reason: "disabled" | "too_long" | "empty" | "unparseable" };
+  | {
+      ok: false;
+      reason: "disabled" | "too_long" | "empty" | "unparseable" | "upstream";
+      /** Only on "upstream": what the API actually said, for the server log. */
+      detail?: string;
+    };
 
 const TOOL_NAME = "record_availability";
 
@@ -53,18 +58,29 @@ Rules:
 
 export async function parseAvailability(
   text: string,
-  options: { apiKey?: string } = {},
+  options: { apiKey?: string; workspaceId?: string } = {},
 ): Promise<ParseResult> {
   const apiKey = options.apiKey ?? process.env.ANTHROPIC_API_KEY;
+  const workspaceId = options.workspaceId ?? process.env.ANTHROPIC_WORKSPACE_ID;
   if (!apiKey) return { ok: false, reason: "disabled" };
 
   const trimmed = text.trim();
   if (trimmed.length === 0) return { ok: false, reason: "empty" };
   if (trimmed.length > MAX_INPUT_CHARS) return { ok: false, reason: "too_long" };
 
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({
+    apiKey,
+    // An identity-linked key (one that works across all workspaces) is rejected
+    // without this header: "anthropic-workspace-id is required when
+    // authenticating with an identity-linked API key". A workspace-scoped key
+    // carries its own workspace and needs nothing, so the header is only sent
+    // when it is configured — which lets either kind of key work.
+    ...(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}),
+  });
 
-  const response = await client.messages.create({
+  let response: Anthropic.Message;
+  try {
+    response = await client.messages.create({
     model: MODEL,
     max_tokens: 1024,
     system: systemPrompt,
@@ -100,8 +116,21 @@ export async function parseAvailability(
         },
       },
     ],
-    messages: [{ role: "user", content: trimmed }],
-  });
+      messages: [{ role: "user", content: trimmed }],
+    });
+  } catch (error) {
+    // Auth, quota, rate limit, outage — all reach here. None of them are the
+    // buyer's fault and none are recoverable by retrying the same request, so
+    // the caller gets one honest signal and the reason goes to the log rather
+    // than to the screen. Before this existed the route threw, the client's
+    // `response.json()` blew up on an HTML error page, and the UI said "could
+    // not reach the parser" — which was false: it was reached, and it answered.
+    return {
+      ok: false,
+      reason: "upstream",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
 
   const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
