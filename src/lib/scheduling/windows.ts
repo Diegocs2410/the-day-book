@@ -12,7 +12,6 @@
  * expansion walks civil dates and re-resolves the offset on each one.
  */
 
-import { TZDate } from "@date-fns/tz";
 import type { DayOfWeek, Interval, RecurringRule } from "./types";
 import { MINUTES_PER_DAY } from "./types";
 
@@ -22,6 +21,8 @@ export interface CivilDate {
   month: number; // 1-12
   day: number; // 1-31
 }
+
+const DAY_MS = 86_400_000;
 
 const civilFormatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -88,26 +89,73 @@ export function civilDatesBetween(from: CivilDate, to: CivilDate): CivilDate[] {
 }
 
 /**
+ * The offset, in milliseconds, that `timeZone` was running at this instant.
+ *
+ * Formatting the instant in the zone and reading the result back as if it were
+ * UTC gives the wall clock; the difference from the real instant is the offset.
+ */
+function offsetAt(instant: number, timeZone: string): number {
+  const parts = offsetFormatter(timeZone).formatToParts(new Date(instant));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const asIfUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour") % 24,
+    get("minute"),
+    get("second"),
+  );
+  return asIfUtc - instant;
+}
+
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function offsetFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = offsetFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    offsetFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+/**
  * Resolve a local wall-clock moment to an instant.
  *
  * `minuteOfDay` may be 1440 (or more), meaning midnight at the end of the day;
  * the civil date rolls forward rather than the hour being clamped, because
  * "open until midnight" is a real window a seller will type.
  *
- * Two DST edge cases, both handled by resolving against the zone rather than
- * an assumed offset:
+ * This is computed here rather than delegated to a date library on purpose.
+ * Twice a year a local time is ambiguous or does not exist, and library
+ * behaviour at those two moments is an implementation detail that varies with
+ * the platform's ICU build. It cost a CI failure to learn that: the same test
+ * returned three hours on Windows and four on Linux. A rule the product
+ * depends on has to be written down in the product.
  *
- *   - **Spring forward.** 02:30 on a day that skips 02:00-03:00 does not exist.
- *     It normalizes forward to 03:30 local. A 01:00-04:00 window that day is
- *     two real hours, not three, and the engine offers slots accordingly.
- *   - **Fall back.** 01:30 happens twice. Both boundaries resolve to the
- *     *second* occurrence, on the post-transition offset. An ambiguous local
- *     time has no correct answer, so what matters is that the choice is
- *     consistent: because start and end resolve the same way, the repeated
- *     hour is skipped rather than duplicated. A 01:00-04:00 window that day is
- *     three real hours, and no two showings can both be labelled "01:30".
- *     Offering the repeated hour twice would be worse than losing it — a buyer
- *     and a seller would read the same label and arrive an hour apart.
+ *   - **Spring forward.** 02:30 on a day that skips 02:00-03:00 does not
+ *     exist. Neither candidate round-trips, so it normalizes forward, past the
+ *     gap, to 03:30 local. A 01:00-04:00 window that day is two real hours,
+ *     not three, and only two hours of slots are offered.
+ *
+ *   - **Fall back.** 01:30 happens twice, and both candidates round-trip.
+ *     `LATER` is chosen — the second occurrence, on the post-transition
+ *     offset. Because start and end resolve the same way, the repeated hour is
+ *     skipped rather than duplicated: a 01:00-04:00 window is three real
+ *     hours, and no two showings can both be labelled "01:30".
+ *
+ *     Losing an hour once a year is the cheaper mistake. Offering it twice
+ *     would put a buyer and a seller an hour apart while both read the same
+ *     time on their screens, and neither would have any way to tell.
  */
 export function zonedInstant(
   date: CivilDate,
@@ -117,16 +165,35 @@ export function zonedInstant(
   const dayOffset = Math.floor(minuteOfDay / MINUTES_PER_DAY);
   const withinDay = minuteOfDay - dayOffset * MINUTES_PER_DAY;
   const target = dayOffset === 0 ? date : addCivilDays(date, dayOffset);
-  return new TZDate(
+
+  // The wall clock read as if it were UTC. The instant we want is this minus
+  // whatever offset the zone is actually running at that moment — which is
+  // circular, so it takes two passes to settle.
+  const wall = Date.UTC(
     target.year,
     target.month - 1,
     target.day,
     Math.floor(withinDay / 60),
     withinDay % 60,
-    0,
-    0,
-    timeZone,
-  ).getTime();
+  );
+
+  // Probe the offsets a day either side rather than iterating from a guess.
+  // Iterating converges on whichever offset it starts from and never finds the
+  // other one, which silently loses the second occurrence of an ambiguous
+  // hour — the bug that made this platform-dependent in the first place.
+  const before = wall - offsetAt(wall - DAY_MS, timeZone);
+  const after = wall - offsetAt(wall + DAY_MS, timeZone);
+
+  // A candidate is real only if reading it back in the zone gives the wall
+  // clock that was asked for. On an ordinary day both candidates are the same
+  // instant; at a transition one or both fail.
+  const candidates = before === after ? [before] : [before, after];
+  const valid = candidates.filter((c) => wall - offsetAt(c, timeZone) === c);
+
+  if (valid.length > 0) return Math.max(...valid);
+
+  // Neither is real: the local time was skipped. Land after the gap.
+  return Math.max(before, after);
 }
 
 export interface ExpandOptions {

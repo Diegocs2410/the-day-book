@@ -65,6 +65,43 @@ describe("zonedInstant", () => {
     expect(wallClock(midnight, NEW_YORK)).toBe("11/06/2026, 00:00");
   });
 
+  it("picks the second occurrence when a local time happens twice", () => {
+    // 2026-11-01: New York repeats 01:00-02:00, so 01:30 exists at both
+    // 05:30Z (EDT) and 06:30Z (EST). The policy is the later one, and it is
+    // asserted directly rather than inferred from a window's length: this
+    // behaviour was inherited from a date library once, and it differed
+    // between Windows and Linux until it was written down here.
+    const ambiguous = zonedInstant(parseCivilDate("2026-11-01"), 90, NEW_YORK);
+    expect(new Date(ambiguous).toISOString()).toBe("2026-11-01T06:30:00.000Z");
+
+    // Both instants really do read as 01:30 locally — that is what makes it
+    // ambiguous rather than simply wrong.
+    expect(wallClock(Date.UTC(2026, 10, 1, 5, 30), NEW_YORK)).toBe("01/11/2026, 01:30");
+    expect(wallClock(Date.UTC(2026, 10, 1, 6, 30), NEW_YORK)).toBe("01/11/2026, 01:30");
+  });
+
+  it("resolves an ordinary local time identically either side of a transition", () => {
+    // The guard against a fix that only works at the edges: on a normal day
+    // there is exactly one answer and it must still be that one.
+    expect(
+      new Date(zonedInstant(parseCivilDate("2026-06-10"), 9 * 60, NEW_YORK)).toISOString(),
+    ).toBe("2026-06-10T13:00:00.000Z"); // EDT
+    expect(
+      new Date(zonedInstant(parseCivilDate("2026-01-14"), 9 * 60, NEW_YORK)).toISOString(),
+    ).toBe("2026-01-14T14:00:00.000Z"); // EST
+  });
+
+  it("resolves wall clock the same way in a zone with no DST at all", () => {
+    // Phoenix never changes its clocks, so every candidate agrees and the
+    // transition machinery has to stay out of the way.
+    expect(
+      new Date(zonedInstant(parseCivilDate("2026-06-10"), 10 * 60, "America/Phoenix")).toISOString(),
+    ).toBe("2026-06-10T17:00:00.000Z");
+    expect(
+      new Date(zonedInstant(parseCivilDate("2026-01-14"), 10 * 60, "America/Phoenix")).toISOString(),
+    ).toBe("2026-01-14T17:00:00.000Z");
+  });
+
   it("normalizes a local time that DST skipped", () => {
     // 2026-03-08: New York jumps 02:00 -> 03:00. 02:30 never happens.
     const skipped = zonedInstant(parseCivilDate("2026-03-08"), 2 * 60 + 30, NEW_YORK);

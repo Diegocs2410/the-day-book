@@ -7,7 +7,7 @@
 -- PostgREST reaches the tables from a browser.
 
 begin;
-select plan(18);
+select plan(21);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: two sellers with a listing each, and two buyers.
@@ -63,20 +63,31 @@ select is(
 );
 
 -- Reading is public; writing is the actual boundary.
-select throws_ok(
-  $$ update public.listings set price_cents = 1 where id = 'bbbbbbbb-0000-0000-0000-000000000002' returning 1 $$,
-  'P0001',
-  null,
-  'seller A cannot UPDATE seller B''s listing'
+--
+-- Note the asymmetry, which is easy to get wrong when writing these: a policy's
+-- USING clause *filters* rather than raises, so a forbidden UPDATE or DELETE
+-- silently affects zero rows. Only a WITH CHECK violation raises 42501. An
+-- assertion that expects an error from the first kind passes for the wrong
+-- reason the day the policy disappears — the row count is what actually proves
+-- the boundary held.
+--
+-- A data-modifying statement cannot sit in a subquery, so these use CTEs.
+with attempted as (
+  update public.listings set price_cents = 1
+  where id = 'bbbbbbbb-0000-0000-0000-000000000002'
+  returning 1
+)
+select is(
+  (select count(*)::int from attempted),
+  0,
+  'seller A cannot UPDATE seller B''s listing — zero rows affected'
 );
 
+-- And the row is untouched, which is the thing that actually matters.
 select is(
-  (select count(*)::int from (
-    update public.listings set price_cents = 1
-    where id = 'bbbbbbbb-0000-0000-0000-000000000002' returning 1
-  ) t),
-  0,
-  'an update against another seller''s listing changes zero rows'
+  (select price_cents from public.listings where id = 'bbbbbbbb-0000-0000-0000-000000000002'),
+  62000000::bigint,
+  'seller B''s price is unchanged'
 );
 
 select throws_ok(
@@ -87,10 +98,13 @@ select throws_ok(
   'seller A cannot create a listing owned by seller B'
 );
 
+with attempted as (
+  delete from public.listings
+  where id = 'bbbbbbbb-0000-0000-0000-000000000002'
+  returning 1
+)
 select is(
-  (select count(*)::int from (
-    delete from public.listings where id = 'bbbbbbbb-0000-0000-0000-000000000002' returning 1
-  ) t),
+  (select count(*)::int from attempted),
   0,
   'seller A cannot DELETE seller B''s listing'
 );
@@ -223,6 +237,33 @@ select throws_ok(
   '42501',
   null,
   'a signed-out visitor cannot book by talking straight to the API'
+);
+
+-- The view exists so a signed-out visitor can search. It has to show the
+-- busy intervals...
+select is(
+  (select count(*)::int from public.listing_busy_times
+   where listing_id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  2,
+  'a signed-out visitor can see which times are taken'
+);
+
+-- ...while the table those rows came from stays shut.
+select throws_ok(
+  $$ select buyer_id from public.showings $$,
+  '42501',
+  null,
+  'a signed-out visitor still cannot read who booked'
+);
+
+-- The guarantee in the migration's comment, asserted rather than trusted: no
+-- column identifying a buyer may ever appear on this view.
+select is(
+  (select count(*)::int from information_schema.columns
+   where table_schema = 'public' and table_name = 'listing_busy_times'
+     and column_name in ('buyer_id', 'buyer_note', 'id', 'status')),
+  0,
+  'the busy-times view exposes no column that identifies a buyer'
 );
 
 select * from finish();

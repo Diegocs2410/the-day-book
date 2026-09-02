@@ -92,11 +92,24 @@ export interface Database {
       blackout_dates: Table<BlackoutDateRow>;
       showings: Table<ShowingRow>;
     };
+    Views: {
+      /**
+       * Booked intervals with no buyer identity attached. Readable by anyone,
+       * which is what lets a signed-out visitor search.
+       */
+      listing_busy_times: {
+        Row: {
+          listing_id: string;
+          starts_at: string;
+          ends_at: string;
+        };
+        Relationships: [];
+      };
+    };
     // `{ [_ in never]: never }` rather than `Record<string, never>`: the
     // latter does not satisfy supabase-js's `Record<string, GenericView>`
     // constraint, and when the schema fails that constraint every query
     // silently degrades to `never` instead of erroring where the mistake is.
-    Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
     Enums: {
       user_role: UserRole;

@@ -124,10 +124,20 @@ Two DST edges fall out of this, and both are tested:
 
 - **Spring forward.** A 01:00–04:00 window on the day the clocks skip 02:00 is
   **two real hours**, not three, and only two hours of slots are offered.
-- **Fall back.** 01:30 happens twice. Both boundaries resolve the same way, so
-  the repeated hour is **skipped rather than offered twice**. That is the safe
-  direction to be wrong in: offering it twice would put a buyer and a seller an
-  hour apart while both read "01:30" on their screens.
+- **Fall back.** 01:30 happens twice. Both boundaries resolve to the **later**
+  occurrence, so the repeated hour is **skipped rather than offered twice**.
+  That is the safe direction to be wrong in: offering it twice would put a
+  buyer and a seller an hour apart while both read "01:30" on their screens.
+
+The offset resolution is computed here rather than delegated to a date library,
+and that was not the original design — CI taught it. The first version used a
+library's `TZDate`, and the fall-back test returned **three hours on Windows and
+four on Linux**: behaviour at an ambiguous local time is an implementation
+detail that moves with the platform's ICU build. A rule the product depends on
+has to be written down inside the product, so `zonedInstant` now probes the
+offsets either side of the wall time, keeps only candidates that read back as
+the requested local time, and picks deterministically. There is a test asserting
+that policy directly, not inferring it from a window's length.
 
 The buyer's availability is expanded in the **buyer's** timezone, and the two
 results are intersected as instants. A buyer in New York genuinely cannot make a
@@ -198,6 +208,12 @@ holds:
 - A buyer reads only their own showings. One buyer can never read another
   buyer's name, note or schedule, which `buyer_note` makes a real privacy
   question rather than a theoretical one.
+- **A signed-out visitor can see *that* a slot is taken, never *who* took it.**
+  Search needs booked intervals in order to subtract them, but `showings`
+  carries `buyer_id` and `buyer_note`. So busy times have their own view
+  exposing three columns and nothing else. It runs as its owner and reads past
+  RLS — which is exactly why adding a column to it is a privacy decision, and
+  why a pgTAP test fails if one identifying a buyer ever appears there.
 - Table-level privileges are revoked before anything is granted back. In
   Postgres privileges add up: a later table-wide `GRANT` silently widens a
   narrow one, and revoking a column afterwards subtracts nothing from it.
@@ -236,7 +252,7 @@ one. That wants Redis, and it is a deliberate omission.
 
 ## Testing strategy
 
-**75 unit tests**, plus database and browser layers. The split is deliberate:
+**78 unit tests**, plus database and browser layers. The split is deliberate:
 `npm test` never needs Docker, so nobody is blocked from running it.
 
 | Layer | Where | What it catches | Docker? |
@@ -257,10 +273,19 @@ Three things worth calling out:
 - **Every fixture is deterministic.** These tests fail on a machine nobody logs
   into; a random fixture makes that failure irreproducible.
 
-Two design bugs in this repo were found by tests rather than by review: the slot
-re-anchoring described above, and a `Database` type written with `interface`
-instead of `type`, which failed supabase-js's `Record<string, unknown>`
-constraint and silently resolved every query to `never`.
+Four bugs in this repo were found by the test layers rather than by review, and
+each one was found by the layer built to catch its kind:
+
+| Found by | Bug |
+|---|---|
+| Unit test | Slots re-anchoring to surviving free time, so booking 10:00 moved every later slot to 10:45 |
+| `tsc` | A `Database` type written with `interface` instead of `type`, failing supabase-js's `Record<string, unknown>` constraint and silently resolving **every** query to `never` |
+| CI, on Linux | The DST fall-back resolution differing between platforms — see above |
+| CI, end-to-end | A signed-out visitor could not search at all, because the query for booked times hit a table `anon` cannot read. The landing page invites exactly that visitor to browse. |
+
+The last one is the argument for the end-to-end layer in miniature: every unit
+test passed, every type checked, and the feature was broken for anybody without
+an account.
 
 ---
 
@@ -338,7 +363,7 @@ first thing a real seller would ask for and the first thing that needs a queue.
 ## Repository map
 
 ```
-src/lib/scheduling/     the engine — pure, no I/O, 75 tests live against it
+src/lib/scheduling/     the engine — pure, no I/O, 78 tests live against it
 src/lib/ai/             the availability parser and its zod gate
 src/lib/search.ts       DB rows → engine inputs → matched listings
 src/app/api/            Route Handlers: authenticate → check → write

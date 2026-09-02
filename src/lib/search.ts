@@ -105,14 +105,17 @@ export async function searchListings({
     now + Math.max(...listings.map((l) => l.booking_window_days)) * 86_400_000,
   ).toISOString();
 
+  // `listing_busy_times`, not `showings`. A signed-out visitor has to be able
+  // to search — the landing page invites them to — and that needs booked
+  // intervals subtracted from the offer. It does not need `buyer_id` or
+  // `buyer_note`, so the view exposes neither. See the migration that adds it.
   const { data: booked, error: bookedError } = await supabase
-    .from("showings")
+    .from("listing_busy_times")
     .select("listing_id, starts_at, ends_at")
     .in(
       "listing_id",
       listings.map((l) => l.id),
     )
-    .neq("status", "canceled")
     .gte("ends_at", new Date(now).toISOString())
     .lte("starts_at", horizonEnd);
 

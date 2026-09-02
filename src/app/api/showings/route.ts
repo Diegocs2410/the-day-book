@@ -66,11 +66,12 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const now = Date.now();
 
+  // The same view the search uses, so the slots this route validates against
+  // are computed from exactly the data the buyer was offered from.
   const { data: existing, error: existingError } = await supabase
-    .from("showings")
+    .from("listing_busy_times")
     .select("starts_at, ends_at")
     .eq("listing_id", listingId)
-    .neq("status", "canceled")
     .gte("ends_at", new Date(now).toISOString());
 
   if (existingError) {
