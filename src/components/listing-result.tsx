@@ -130,7 +130,7 @@ export function ListingResult({
           <div className="slip slip-print mt-4 max-w-[26rem] p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="colhead" style={{ color: "var(--canary-ink)" }}>
+                <p className="colhead" style={{ color: "var(--buyer-band)" }}>
                   Your copy
                 </p>
                 <p className="mt-1 text-[0.9375rem] font-semibold" style={{ color: "var(--text)" }}>
