@@ -45,6 +45,22 @@ function overlapFor(a: Band[], b: Band[], day: number): Band[] {
   return out;
 }
 
+/**
+ * What the right-hand column says for one day.
+ *
+ * Three different questions depending on who is on the rule: where two weeks
+ * meet, when the house is open, or nothing at all.
+ */
+function rowSummary(seller: Band[], both: Band[], comparing: boolean): string {
+  const range = (b: Band) => `${clock(b.startMinute)}–${clock(b.endMinute)}`;
+
+  if (!comparing) {
+    return seller.length > 0 ? seller.map(range).join(", ") : "closed";
+  }
+  if (both.length > 0) return both.map(range).join(", ");
+  return seller.length > 0 ? "no overlap" : "closed";
+}
+
 function clock(minute: number): string {
   const h = Math.floor(minute / 60);
   const m = minute % 60;
@@ -70,6 +86,11 @@ export function RuledWeek({
   buyerLabel = "You are free",
 }: RuledWeekProps) {
   const hours = [6, 9, 12, 15, 18, 21];
+  // With no second week on the rule there is nothing to overlap *with*, so the
+  // summary column has to change what it reports. The seller's own book uses
+  // this component too, and telling a seller their open Saturday has "no
+  // overlap" is a sentence about a buyer who does not exist.
+  const comparing = buyer.length > 0;
 
   return (
     <div className="w-full">
@@ -166,11 +187,7 @@ export function RuledWeek({
                 className="tabular w-32 shrink-0 self-center text-right text-[0.6875rem]"
                 style={{ color: both.length > 0 ? "var(--stamp)" : "var(--text-faint)" }}
               >
-                {both.length > 0
-                  ? both.map((b) => `${clock(b.startMinute)}–${clock(b.endMinute)}`).join(", ")
-                  : sellerBands.length > 0
-                    ? "no overlap"
-                    : "closed"}
+                {rowSummary(sellerBands, both, comparing)}
               </span>
             </div>
           );
