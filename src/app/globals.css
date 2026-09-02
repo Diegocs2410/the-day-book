@@ -1,26 +1,282 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * The Day Book.
+ *
+ * Light mode is the open book: ledger paper, ink rules. Dark mode is the
+ * closed book: bookcloth ground, paper-white rules. Same object, two lights —
+ * a seller sets their week at a kitchen table in the evening, a buyer checks
+ * slots on a phone at midnight, and both are real.
+ *
+ * The paper is a COOL blue-white. Not cream. A ledger is not a novel.
+ */
+
+@theme {
+  --font-sans: Archivo, ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces */
+  --color-paper: oklch(0.985 0.004 250);
+  --color-paper-sunk: oklch(0.955 0.006 250);
+  --color-bookcloth: oklch(0.27 0.055 258);
+  --color-bookcloth-deep: oklch(0.21 0.05 258);
+
+  /* Ink */
+  --color-ink: oklch(0.25 0.015 262);
+  --color-ink-soft: oklch(0.46 0.02 262);
+  --color-ink-faint: oklch(0.62 0.018 262);
+
+  /* The rules themselves */
+  --color-feint: oklch(0.885 0.032 245);
+  --color-margin: oklch(0.55 0.19 25);
+  --color-stamp: oklch(0.48 0.16 300);
+  --color-canary: oklch(0.90 0.11 96);
+  --color-canary-ink: oklch(0.42 0.09 82);
+
+  /* The ruled rhythm. Every ledger block is a multiple of this. */
+  --rule-step: 2rem;
+
+  --radius-slip: 2px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --surface: var(--color-paper);
+  --surface-sunk: var(--color-paper-sunk);
+  --chrome: var(--color-bookcloth);
+  --chrome-ink: oklch(0.93 0.012 250);
+  --text: var(--color-ink);
+  --text-soft: var(--color-ink-soft);
+  --text-faint: var(--color-ink-faint);
+  --rule: var(--color-feint);
+  --rule-strong: oklch(0.78 0.04 245);
+  --margin-rule: var(--color-margin);
+  --stamp: var(--color-stamp);
+  --seller-band: oklch(0.55 0.13 258);
+  --seller-band-soft: oklch(0.90 0.05 258);
+  --buyer-band: var(--color-canary-ink);
+  --buyer-band-soft: oklch(0.93 0.09 96);
+  --slip: oklch(0.965 0.055 98);
+  --slip-rule: oklch(0.83 0.09 92);
+  --shadow-lift: 0 1px 2px oklch(0.25 0.02 262 / 0.10), 0 6px 16px -8px oklch(0.25 0.02 262 / 0.22);
+}
+
+:root[data-book="closed"] {
+  --surface: var(--color-bookcloth-deep);
+  --surface-sunk: oklch(0.17 0.04 258);
+  --chrome: oklch(0.24 0.05 258);
+  --chrome-ink: oklch(0.94 0.01 250);
+  --text: oklch(0.94 0.008 250);
+  --text-soft: oklch(0.78 0.015 250);
+  --text-faint: oklch(0.63 0.018 250);
+  --rule: oklch(0.36 0.035 250);
+  --rule-strong: oklch(0.48 0.04 250);
+  --margin-rule: oklch(0.66 0.17 27);
+  --stamp: oklch(0.72 0.15 305);
+  --seller-band: oklch(0.72 0.12 255);
+  --seller-band-soft: oklch(0.33 0.06 258);
+  --buyer-band: oklch(0.86 0.12 95);
+  --buyer-band-soft: oklch(0.34 0.06 92);
+  --slip: oklch(0.30 0.05 95);
+  --slip-rule: oklch(0.45 0.07 92);
+  --shadow-lift: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 20px -10px oklch(0 0 0 / 0.6);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-book="open"]) {
+    --surface: var(--color-bookcloth-deep);
+    --surface-sunk: oklch(0.17 0.04 258);
+    --chrome: oklch(0.24 0.05 258);
+    --chrome-ink: oklch(0.94 0.01 250);
+    --text: oklch(0.94 0.008 250);
+    --text-soft: oklch(0.78 0.015 250);
+    --text-faint: oklch(0.63 0.018 250);
+    --rule: oklch(0.36 0.035 250);
+    --rule-strong: oklch(0.48 0.04 250);
+    --margin-rule: oklch(0.66 0.17 27);
+    --stamp: oklch(0.72 0.15 305);
+    --seller-band: oklch(0.72 0.12 255);
+    --seller-band-soft: oklch(0.33 0.06 258);
+    --buyer-band: oklch(0.86 0.12 95);
+    --buyer-band-soft: oklch(0.34 0.06 92);
+    --slip: oklch(0.30 0.05 95);
+    --slip-rule: oklch(0.45 0.07 92);
+    --shadow-lift: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 20px -10px oklch(0 0 0 / 0.6);
   }
 }
 
+* {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+html {
+  color-scheme: light dark;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Times and prices align in columns, the way a ledger's do. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* A ledger's column head: letterspaced, small, quiet. */
+.colhead {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/*
+ * The ruled page. Feint lines at a fixed rhythm with one red margin rule down
+ * the left — the structural element of this whole system. Where another
+ * design would reach for a card and a shadow, this reaches for rules.
+ */
+.ledger {
+  position: relative;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--rule-step) - 1px),
+    var(--rule) calc(var(--rule-step) - 1px),
+    var(--rule) var(--rule-step)
+  );
+  background-position: 0 0;
+}
+
+.ledger-margin {
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.ledger-margin::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0.75rem;
+  width: 1px;
+  background: var(--margin-rule);
+  opacity: 0.65;
+}
+
+/*
+ * Hatching. The overlap between two people's availability is the product's
+ * whole idea, so it is drawn three ways at once — colour, pattern, and a text
+ * label — and reads correctly for anyone who cannot use the colour.
+ */
+.hatch-seller {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--seller-band) 0 1px,
+    transparent 1px 6px
+  );
+}
+
+.hatch-buyer {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--buyer-band) 0 1px,
+    transparent 1px 6px
+  );
+}
+
+.hatch-both {
+  background-image:
+    repeating-linear-gradient(45deg, var(--seller-band) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-45deg, var(--buyer-band) 0 1px, transparent 1px 6px);
+}
+
+/* The carbon duplicate. The one place a card is honest: it IS a slip of paper. */
+.slip {
+  background: var(--slip);
+  border: 1px solid var(--slip-rule);
+  border-radius: var(--radius-slip);
+  box-shadow: var(--shadow-lift);
+}
+
+/* Anything committed is stamped, not merely coloured. */
+.stamp {
+  color: var(--stamp);
+  border: 1.5px solid var(--stamp);
+  border-radius: 2px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transform: rotate(-1.5deg);
+  display: inline-block;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--stamp);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * The one authored moment: two people's weeks sliding into register.
+ * Runs once, on the landing page. The product surfaces load into a task and
+ * get no entrance at all.
+ */
+@keyframes band-in {
+  from {
+    opacity: 0;
+    transform: translateX(-1.25rem) scaleX(0.82);
+    transform-origin: left center;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlap-in {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* Booking prints the carbon duplicate. State change made visible. */
+@keyframes slip-print {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) rotate(-1.2deg);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.slip-print {
+  animation: slip-print 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
