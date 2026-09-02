@@ -281,19 +281,29 @@ Three things worth calling out:
 - **Every fixture is deterministic.** These tests fail on a machine nobody logs
   into; a random fixture makes that failure irreproducible.
 
-Four bugs in this repo were found by the test layers rather than by review, and
-each one was found by the layer built to catch its kind:
+Five bugs in this repo were found by running it rather than by reading it, and
+each was caught by the layer built for its kind:
 
 | Found by | Bug |
 |---|---|
 | Unit test | Slots re-anchoring to surviving free time, so booking 10:00 moved every later slot to 10:45 |
 | `tsc` | A `Database` type written with `interface` instead of `type`, failing supabase-js's `Record<string, unknown>` constraint and silently resolving **every** query to `never` |
 | CI, on Linux | The DST fall-back resolution differing between platforms — see above |
-| CI, end-to-end | A signed-out visitor could not search at all, because the query for booked times hit a table `anon` cannot read. The landing page invites exactly that visitor to browse. |
+| CI, end-to-end | A signed-out visitor could not search at all: the query for booked times hit a table `anon` cannot read, and the landing page invites exactly that visitor to browse |
+| Production | An upstream API error escaped the route, Next returned an HTML 500, the client failed parsing it as JSON, and the buyer read **"could not reach the parser"** |
 
-The last one is the argument for the end-to-end layer in miniature: every unit
-test passed, every type checked, and the feature was broken for anybody without
-an account.
+Two of them are worth the space they take.
+
+The **fourth** is the argument for the end-to-end layer in one line: every unit
+test passed, every type checked, and the feature was broken for everybody
+without an account.
+
+The **fifth** is about error messages. That one lied — the parser *was* reached,
+and it answered, naming exactly what was missing. An error that lies is worse
+than no error at all, because it sends you to diagnose the wrong thing. Upstream
+failures are now caught, logged with the real reason, and surfaced as one honest
+sentence that points at the manual grid. The API's own message never reaches the
+screen: on a public demo it can carry account and key details.
 
 ---
 
