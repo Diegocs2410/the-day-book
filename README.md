@@ -315,8 +315,13 @@ npx supabase start && npx supabase db reset
 
 `supabase start` prints the local API URL and keys — put them in `.env.local` as
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and
-`SUPABASE_SECRET_KEY`. `ANTHROPIC_API_KEY` is optional; without it the
-natural-language box turns itself off and the grid still works.
+`SUPABASE_SECRET_KEY`.
+
+`ANTHROPIC_API_KEY` is optional; without it the natural-language box turns
+itself off and the grid still works. If yours is an *identity-linked* key — one
+issued for "all workspaces" — also set `ANTHROPIC_WORKSPACE_ID`, or the API
+rejects every request with `anthropic-workspace-id is required`. A
+workspace-scoped key carries its own and needs nothing.
 
 ```bash
 npm run seed && npm run dev
