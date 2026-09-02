@@ -1,24 +1,23 @@
 # The Day Book
 
-**A two-sided home showing scheduler.** Sellers write down the hours their house
-can be seen. Buyers write down the hours they are free. The only listings a
-buyer sees are the ones with a real opening inside their week, and the slot
-books on the spot.
+**Sellers write down the hours their house can be seen. Buyers write down the
+hours they are free. Only the overlap is bookable.**
 
-Built as a one-day challenge. The interesting part is not the CRUD — it is that
-"when can both of these people be at this house" is a genuinely hard question
-once timezones, daylight saving, turnaround buffers and two people pressing
-*Book* at the same moment are all real.
+Every listing site shows a buyer every house and leaves them to work out which
+ones they can actually get to. This inverts it: availability is the filter, not
+an afterthought.
+
+Built in a day. The hard part was never the CRUD — it is that *"when can both of
+these people be at this house"* stops being obvious the moment two timezones,
+daylight saving, a turnaround gap, and two people pressing **Book** at the same
+second are all real at once.
 
 > ### ▶ [**the-day-book.vercel.app**](https://the-day-book.vercel.app)
 >
-> Two one-click doors on the front page — **Keep a book** signs you in as a
-> seller, **Find a slot** as a buyer. No sign-up, nothing to fill in.
->
-> The demo buyer sits in **New York** while four of the six houses are on other
-> clocks, so the cross-timezone translation is visible on the first search
-> rather than being a feature you have to go looking for. Try
-> *"Saturday mornings"* in the natural-language box.
+> Two doors on the front page, one click each, no sign-up. The demo buyer sits
+> in **New York** while four of the six houses are on other clocks — so the
+> timezone translation shows up on your first search instead of hiding. Try
+> typing *"Saturday mornings"*.
 >
 > Every listing, address, price and person in it is invented.
 
@@ -371,14 +370,42 @@ first thing a real seller would ask for and the first thing that needs a queue.
 
 ## Repository map
 
+Read it in this order and the design explains itself.
+
 ```
-src/lib/scheduling/     the engine — pure, no I/O, 78 tests live against it
-src/lib/ai/             the availability parser and its zod gate
-src/lib/search.ts       DB rows → engine inputs → matched listings
-src/app/api/            Route Handlers: authenticate → check → write
-src/components/         the ruled week, the availability grid, the slip
-supabase/migrations/    the schema, RLS policies, and the EXCLUDE constraint
-supabase/tests/         pgTAP: isolation and the race
-e2e/                    the booking funnel and the race, in a browser
-PRODUCT.md DESIGN.md    product truth and the visual system
+src/lib/scheduling/       ← start here. The engine, and the reason this repo exists.
+    types.ts                a rule is wall clock; an interval is instants. Never mixed.
+    windows.ts              the only file that knows what a timezone is
+    intersect.ts            interval algebra — no dates, no I/O, just numbers
+    match.ts                composes the two: rules in, bookable slots out
+    rules.ts                the form's friendly bounds, kept honest against the SQL
+    *.test.ts               78 tests, including a golden master over the whole pipeline
+
+supabase/
+    migrations/             the schema, the RLS policies, the EXCLUDE constraint
+    tests/                  pgTAP — isolation and the race, in real Postgres
+
+src/lib/
+    search.ts               DB rows → engine inputs → matched listings
+    ai/                     the availability parser and the zod gate around it
+    supabase/               three clients: browser, server (RLS), admin (not RLS)
+
+src/app/
+    page.tsx                the landing page, which draws the mechanism
+    search/ seller/         the two sides
+    api/                    Route Handlers: authenticate → check ownership → write
+    proxy.ts                session refresh (Next 16 renamed middleware)
+
+src/components/
+    ruled-week.tsx          the shared drawing — both sides use the same rule
+    availability-grid.tsx   keyboard-operable, because a grid is 2D
+    listing-result.tsx      slots, and the carbon duplicate
+
+e2e/                        the funnel and the race, in a browser
+PRODUCT.md  DESIGN.md       product truth; the visual system and why it was chosen
 ```
+
+The shape is deliberate: **the engine at the bottom depends on nothing.** Not on
+React, not on Supabase, not on the clock. Everything above it is plumbing that
+can be swapped, and the part that would be expensive to get wrong is the part
+with no dependencies and the most tests.
