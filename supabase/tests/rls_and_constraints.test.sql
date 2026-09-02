@@ -7,7 +7,7 @@
 -- PostgREST reaches the tables from a browser.
 
 begin;
-select plan(21);
+select plan(22);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: two sellers with a listing each, and two buyers.
