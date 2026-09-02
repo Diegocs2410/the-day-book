@@ -10,8 +10,17 @@ Built as a one-day challenge. The interesting part is not the CRUD — it is tha
 once timezones, daylight saving, turnaround buffers and two people pressing
 *Book* at the same moment are all real.
 
-> **Live demo:** _(link goes here)_ — two one-click doors on the front page, no
-> sign-up. Every listing, address, price and person in it is invented.
+> ### ▶ [**the-day-book.vercel.app**](https://the-day-book.vercel.app)
+>
+> Two one-click doors on the front page — **Keep a book** signs you in as a
+> seller, **Find a slot** as a buyer. No sign-up, nothing to fill in.
+>
+> The demo buyer sits in **New York** while four of the six houses are on other
+> clocks, so the cross-timezone translation is visible on the first search
+> rather than being a feature you have to go looking for. Try
+> *"Saturday mornings"* in the natural-language box.
+>
+> Every listing, address, price and person in it is invented.
 
 ---
 

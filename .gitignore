@@ -52,5 +52,12 @@ next-env.d.ts
 
 # local secrets (db password, linked project state)
 *.local
-!.env.example
 .supabase/
+
+.vercel
+.env*
+
+# Last word wins in gitignore, so this negation must stay at the bottom.
+# Both the scaffold and `vercel link` write a blanket `.env*` above, and either
+# one silently swallows the template the README tells every reader to copy.
+!.env.example
