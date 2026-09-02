@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A push that supersedes an in-flight run cancels it. CI minutes spent on a
+# commit nobody will look at again are minutes not spent on the next one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Placeholders. The build and the unit tests never reach a database; the jobs
+  # that do start their own local Supabase and overwrite these.
+  NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+
+jobs:
+  # Cheap and first: catch a committed secret before spending a runner on it.
+  hygiene:
+    name: Hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No environment file is tracked
+        run: |
+          if git ls-files --error-unmatch .env .env.local '*.env.local' 2>/dev/null; then
+            echo "::error::An env file is committed. Secrets do not belong in git."
+            exit 1
+          fi
+          echo "No env file tracked."
+
+      - name: No service-role key in the source
+        run: |
+          # The secret key is server-only and lives in the deployment's
+          # environment. Finding one in a file means it is already burned.
+          if grep -rInE 'SUPABASE_SECRET_KEY\s*=\s*["'"'"']?ey' --include='*.ts' --include='*.tsx' --include='*.mts' --include='*.json' .; then
+            echo "::error::A service-role key appears to be hardcoded."
+            exit 1
+          fi
+          echo "No hardcoded keys."
+
+  verify:
+    name: Types, lint, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:coverage
+      - run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  database:
+    name: Migrations and pgTAP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Postgres and replay every migration
+        run: supabase start
+
+      # `db reset` replays the migrations from scratch. A migration that only
+      # works against a database that already has the previous state applied
+      # fails here, which is the point.
+      - name: Reset from migrations
+        run: supabase db reset
+
+      - name: RLS and constraint tests
+        run: supabase test db
+
+  e2e:
+    name: Booking funnel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase
+        run: supabase start
+
+      - name: Point the app at the local stack
+        run: |
+          # `supabase status -o env` prints the local keys. Reading them here
+          # rather than hardcoding means the job survives a CLI key rename.
+          supabase status -o env | sed 's/^/export /' > /tmp/supabase.env
+          . /tmp/supabase.env
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY"
+            echo "SUPABASE_SECRET_KEY=$SERVICE_ROLE_KEY"
+            echo "DEMO_SELLER_EMAIL=seller@demo.test"
+            echo "DEMO_BUYER_EMAIL=buyer@demo.test"
+            echo "DEMO_PASSWORD=showing-demo-2026"
+          } >> "$GITHUB_ENV"
+
+      - name: Seed the demo data
+        run: npm run seed
+
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

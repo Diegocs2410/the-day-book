@@ -95,7 +95,14 @@ export function ListingResult({
   const mine = booked ? partsIn(booked.startsAt, buyerTimeZone) : null;
 
   return (
-    <article className="border-b py-6" style={{ borderColor: "var(--rule-strong)" }}>
+    // The two data attributes are the only test hooks in the app. The end-to-end
+    // race test has to POST a slot that genuinely exists, and inventing a time
+    // would test nothing; reading one the server actually rendered does.
+    <article
+      className="border-b py-6"
+      style={{ borderColor: "var(--rule-strong)" }}
+      data-listing={listing.id}
+    >
       <div className="ledger-margin">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
           <h3 className="text-[1.0625rem] font-semibold">{listing.address}</h3>
@@ -155,6 +162,7 @@ export function ListingResult({
                   <button
                     key={slot.startsAt}
                     type="button"
+                    data-starts-at={slot.startsAt}
                     onClick={() => book(slot)}
                     disabled={!signedIn || booking !== null}
                     aria-label={`Book ${atHouse.day} at ${atHouse.time} ${atHouse.zone}${
